@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>ClinicalSim — Medical Roguelite</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#1a1a2e;--panel:#16213e;--accent:#0f3460;--gold:#e2b714;
+  --green:#2ecc71;--red:#e74c3c;--blue:#3498db;--white:#ecf0f1;
+  --text:#c8d6e5;--dark:#0a0a1a;
+  --font:'Segoe UI',system-ui,-apple-system,sans-serif;
+  --mono:'Courier New',monospace;
+}
+html,body{width:100%;height:100%;overflow:hidden;font-family:var(--font);background:var(--bg);color:var(--text)}
+canvas{position:fixed;top:0;left:0;z-index:0}
+
+/* UI Overlay */
+#ui{position:fixed;top:0;left:0;width:100%;height:100%;z-index:10;pointer-events:none;display:flex;flex-direction:column}
+#ui>*{pointer-events:auto}
+.hidden{display:none!important}
+
+/* Top Bar */
+#topbar{display:flex;justify-content:space-between;align-items:center;padding:8px 16px;background:rgba(15,52,96,.85);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,.08);font-size:14px;min-height:48px;flex-shrink:0}
+#topbar .stat{display:flex;align-items:center;gap:6px}
+#topbar .stat .icon{font-size:18px}
+#topbar .stat .val{font-weight:700;color:var(--gold)}
+.stats-left,.stats-right{display:flex;gap:16px;align-items:center}
+#day-label{font-weight:700;color:var(--blue);font-size:15px}
+
+/* News Ticker */
+#ticker{background:rgba(10,10,26,.9);padding:6px 16px;font-size:13px;color:var(--gold);text-align:center;overflow:hidden;white-space:nowrap;min-height:28px;flex-shrink:0;border-bottom:1px solid rgba(226,183,20,.15)}
+#ticker span{display:inline-block;animation:scroll-ticker 18s linear infinite}
+@keyframes scroll-ticker{0%{transform:translateX(100vw)}100%{transform:translateX(-100%)}}
+
+/* Main Content Area */
+#main{flex:1;display:flex;justify-content:center;align-items:center;padding:16px;overflow-y:auto;pointer-events:none}
+#main>*{pointer-events:auto}
+
+/* Panels */
+.panel{background:rgba(22,33,62,.92);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:28px;max-width:720px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.4);animation:fadeIn .4s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.panel h2{font-size:22px;color:var(--white);margin-bottom:16px;text-align:center}
+.panel h3{font-size:16px;color:var(--blue);margin-bottom:8px}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 24px;border:none;border-radius:10px;font-family:var(--font);font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;gap:8px;position:relative;overflow:hidden}
+.btn::after{content:'';position:absolute;inset:0;background:rgba(255,255,255,0);transition:background .2s}
+.btn:hover::after{background:rgba(255,255,255,.08)}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-gold{background:var(--gold);color:#1a1a2e}
+.btn-green{background:var(--green);color:#fff}
+.btn-red{background:var(--red);color:#fff}
+.btn-ghost{background:rgba(255,255,255,.06);color:var(--text);border:1px solid rgba(255,255,255,.1)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+/* Option Buttons (Diagnosis/Treatment) */
+.option-grid{display:flex;flex-direction:column;gap:10px;margin:12px 0}
+.option-btn{text-align:left;padding:14px 18px;border-radius:12px;background:rgba(255,255,255,.04);border:2px solid rgba(255,255,255,.08);color:var(--white);font-size:14px;cursor:pointer;transition:all .25s;font-family:var(--font);line-height:1.4}
+.option-btn:hover{border-color:var(--blue);background:rgba(52,152,219,.1)}
+.option-btn.selected{border-color:var(--blue);background:rgba(52,152,219,.15)}
+.option-btn.correct{border-color:var(--green)!important;background:rgba(46,204,113,.15)!important;animation:pulse-green .5s}
+.option-btn.wrong{border-color:var(--red)!important;background:rgba(231,76,60,.15)!important;animation:shake .4s}
+.option-btn.eliminated{opacity:.3;pointer-events:none;text-decoration:line-through}
+@keyframes pulse-green{0%,100%{box-shadow:none}50%{box-shadow:0 0 20px rgba(46,204,113,.4)}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+
+/* Vitals Display */
+.vitals{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:12px 0;padding:12px;background:rgba(0,0,0,.2);border-radius:10px}
+.vital-item{display:flex;align-items:center;gap:8px;font-size:13px}
+.vital-label{color:var(--text);opacity:.7}
+.vital-val{font-weight:700;font-family:var(--mono);color:var(--green)}
+.vital-val.abnormal{color:var(--red)}
+
+/* Shop Cards */
+.shop-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:16px 0}
+.shop-card{background:rgba(255,255,255,.04);border:2px solid rgba(255,255,255,.08);border-radius:14px;padding:18px;text-align:center;transition:all .25s;cursor:pointer}
+.shop-card:hover{border-color:var(--gold);background:rgba(226,183,20,.06);transform:translateY(-2px)}
+.shop-card.owned{border-color:var(--green);opacity:.5;cursor:default}
+.shop-card.cant-afford{opacity:.4;cursor:not-allowed}
+.shop-card .card-icon{font-size:32px;margin-bottom:8px}
+.shop-card .card-name{font-weight:700;color:var(--white);font-size:15px;margin-bottom:4px}
+.shop-card .card-desc{font-size:12px;color:var(--text);opacity:.7;margin-bottom:10px;line-height:1.4}
+.shop-card .card-price{font-size:16px;font-weight:700;color:var(--gold)}
+
+/* Patient Display */
+.patient-info{display:flex;flex-direction:column;gap:4px;margin:10px 0}
+.complaint-bubble{background:rgba(255,255,255,.06);border-radius:16px 16px 16px 4px;padding:14px 18px;font-style:italic;color:var(--white);font-size:15px;line-height:1.5;border:1px solid rgba(255,255,255,.06);position:relative;margin-bottom:8px}
+.complaint-bubble::before{content:'💬';position:absolute;top:-10px;left:12px;font-size:14px}
+.symptoms{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.symptom-tag{background:rgba(52,152,219,.15);color:var(--blue);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600}
+
+/* Lab Values */
+.lab-panel{background:rgba(46,204,113,.08);border:1px solid rgba(46,204,113,.2);border-radius:10px;padding:12px;margin:8px 0;font-size:13px}
+.lab-panel h4{color:var(--green);margin-bottom:6px;font-size:13px}
+
+/* Diagnostic Clue */
+.diag-clue{background:rgba(52,152,219,.1);border:1px solid rgba(52,152,219,.2);border-radius:10px;padding:12px;margin:8px 0;font-size:13px}
+.diag-clue h4{color:var(--blue);margin-bottom:6px;font-size:13px}
+
+/* Summary */
+.summary-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.summary-row:last-child{border:none}
+.summary-result{font-weight:700;font-size:14px}
+.summary-result.good{color:var(--green)}
+.summary-result.partial{color:var(--gold)}
+.summary-result.bad{color:var(--red)}
+
+/* Nurse Dialogue */
+.nurse-msg{display:flex;align-items:flex-start;gap:12px;margin:12px 0;padding:12px;background:rgba(255,255,255,.03);border-radius:12px}
+.nurse-avatar{font-size:28px;flex-shrink:0}
+.nurse-text{font-size:13px;color:var(--text);line-height:1.5}
+
+/* Title Screen */
+#title-screen .title-logo{font-size:48px;font-weight:800;color:var(--white);text-align:center;margin-bottom:4px;letter-spacing:-1px}
+#title-screen .title-sub{font-size:16px;color:var(--text);text-align:center;margin-bottom:24px;opacity:.7}
+#title-screen .title-desc{font-size:14px;color:var(--text);text-align:center;margin-bottom:28px;line-height:1.6;opacity:.6}
+.title-buttons{display:flex;flex-direction:column;gap:10px;align-items:center}
+.title-buttons .btn{min-width:220px}
+
+/* Progress Bar */
+.progress-bar{width:100%;height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;margin:4px 0}
+.progress-fill{height:100%;border-radius:4px;transition:width .5s ease}
+
+/* Encounter Phase Label */
+.phase-label{text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:2px;color:var(--text);opacity:.5;margin-bottom:12px}
+
+/* Scrollable content inside panels */
+.panel-scroll{max-height:calc(100vh - 160px);overflow-y:auto;padding-right:4px}
+.panel-scroll::-webkit-scrollbar{width:4px}
+.panel-scroll::-webkit-scrollbar-track{background:transparent}
+.panel-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:2px}
+
+/* Responsive */
+@media(max-width:600px){
+  .panel{padding:18px;border-radius:12px;margin:8px}
+  .panel h2{font-size:18px}
+  #topbar{padding:6px 10px;font-size:12px}
+  .stats-left,.stats-right{gap:10px}
+  .shop-grid{grid-template-columns:1fr}
+  .vitals{grid-template-columns:1fr 1fr}
+  .btn{padding:10px 18px;font-size:14px}
+  #title-screen .title-logo{font-size:36px}
+}
+
+/* Transition overlay */
+#transition{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .4s}
+#transition.active{opacity:1;pointer-events:auto}
+#transition .trans-text{font-size:28px;font-weight:700;color:var(--white);text-shadow:0 2px 20px rgba(0,0,0,.6)}
+
+/* Use item button */
+.use-item-btn{font-size:11px;padding:4px 10px;border-radius:6px;background:rgba(226,183,20,.15);color:var(--gold);border:1px solid rgba(226,183,20,.3);cursor:pointer;transition:all .2s;font-weight:600}
+.use-item-btn:hover{background:rgba(226,183,20,.25)}
+.use-item-btn:disabled{opacity:.3;cursor:not-allowed}
+
+/* Result overlay */
+.result-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);border-radius:16px;z-index:5}
+.result-overlay .result-icon{font-size:64px;animation:pop .4s ease}
+@keyframes pop{0%{transform:scale(0)}50%{transform:scale(1.3)}100%{transform:scale(1)}}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+
+<div id="ui">
+  <div id="topbar" class="hidden">
+    <div class="stats-left">
+      <span id="day-label">Day 1</span>
+      <div class="stat"><span class="icon">💰</span><span class="val" id="money-val">$0</span></div>
+    </div>
+    <div class="stats-right">
+      <div class="stat"><span class="icon">⭐</span><span class="val" id="rep-val">50</span></div>
+      <div class="stat"><span class="icon">🏥</span><span class="val" id="phase-val">Shop</span></div>
+    </div>
+  </div>
+  <div id="ticker" class="hidden"><span id="ticker-text">Welcome to your new clinic. The community is counting on you.</span></div>
+  <div id="main">
+    <!-- Dynamic content injected here -->
+  </div>
+</div>
+
+<div id="transition"><div class="trans-text" id="trans-text"></div></div>
+
+<script>
+// ============================================================
+// CLINICALSIM — Complete Game
+// ============================================================
+
+// --- Audio Engine ---
+const Audio = (() => {
+  let ctx;
+  const getCtx = () => {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    return ctx;
+  };
+  const play = (freq, type, dur, vol=.12) => {
+    try {
+      const c = getCtx(), o = c.createOscillator(), g = c.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.setValueAtTime(vol, c.currentTime);
+      g.gain.exponentialRampToValueAtTime(.001, c.currentTime + dur);
+      o.connect(g); g.connect(c.destination);
+      o.start(); o.stop(c.currentTime + dur);
+    } catch(e){}
+  };
+  return {
+    click:   () => play(800, 'sine', .06, .08),
+    success: () => { play(523, 'sine', .15, .1); setTimeout(()=>play(659,'sine',.15,.1),100); setTimeout(()=>play(784,'sine',.25,.12),200); },
+    fail:    () => { play(300, 'sawtooth', .2, .08); setTimeout(()=>play(250,'sawtooth',.3,.08),150); },
+    coin:    () => { play(988, 'sine', .08, .06); setTimeout(()=>play(1319,'sine',.12,.06),80); },
+    shop:    () => play(440, 'triangle', .2, .06),
+    transition: () => play(330, 'sine', .4, .05)
+  };
+})();
+
+// --- Canvas Background ---
+const canvas = document.getElementById('bg');
+const cx = canvas.getContext('2d');
+let bgMode = 'title'; // title, morning, day, evening, night
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+const particles = Array.from({length: 30}, () => ({
+  x: Math.random() * window.innerWidth,
+  y: Math.random() * window.innerHeight,
+  r: Math.random() * 2 + 1,
+  dx: (Math.random() - .5) * .3,
+  dy: (Math.random() - .5) * .3,
+  o: Math.random() * .3 + .05
+}));
+
+function drawBg() {
+  const w = canvas.width, h = canvas.height;
+  let g;
+  switch(bgMode) {
+    case 'morning':
+      g = cx.createLinearGradient(0,0,0,h);
+      g.addColorStop(0,'#2c1810'); g.addColorStop(.5,'#4a2c17'); g.addColorStop(1,'#1a1a2e');
+      break;
+    case 'day':
+      g = cx.createLinearGradient(0,0,0,h);
+      g.addColorStop(0,'#1a2a4a'); g.addColorStop(.5,'#16213e'); g.addColorStop(1,'#0a0a1a');
+      break;
+    case 'evening':
+      g = cx.createLinearGradient(0,0,0,h);
+      g.addColorStop(0,'#2c1810'); g.addColorStop(.5,'#1a1a2e'); g.addColorStop(1,'#0a0a1a');
+      break;
+    default:
+      g = cx.createLinearGradient(0,0,0,h);
+      g.addColorStop(0,'#0a0a1a'); g.addColorStop(1,'#1a1a2e');
+  }
+  cx.fillStyle = g;
+  cx.fillRect(0,0,w,h);
+
+  // Draw exam room in day mode
+  if (bgMode === 'day') {
+    // Floor
+    cx.fillStyle = 'rgba(200,210,220,.04)';
+    cx.fillRect(0, h*.65, w, h*.35);
+    // Wall line
+    cx.strokeStyle = 'rgba(255,255,255,.03)';
+    cx.lineWidth = 1;
+    cx.beginPath(); cx.moveTo(0, h*.65); cx.lineTo(w, h*.65); cx.stroke();
+    // Cabinet
+    cx.fillStyle = 'rgba(255,255,255,.02)';
+    cx.fillRect(w*.75, h*.3, w*.15, h*.35);
+    cx.strokeStyle = 'rgba(255,255,255,.03)';
+    cx.strokeRect(w*.75, h*.3, w*.15, h*.35);
+  }
+
+  // Morning shop warm glow
+  if (bgMode === 'morning') {
+    cx.fillStyle = 'rgba(226,183,20,.02)';
+    cx.beginPath();
+    cx.arc(w*.5, h*.3, 200, 0, Math.PI*2);
+    cx.fill();
+  }
+
+  // Particles
+  particles.forEach(p => {
+    p.x += p.dx; p.y += p.dy;
+    if (p.x < 0) p.x = w; if (p.x > w) p.x = 0;
+    if (p.y < 0) p.y = h; if (p.y > h) p.y = 0;
+    cx.beginPath();
+    cx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    cx.fillStyle = `rgba(255,255,255,${p.o})`;
+    cx.fill();
+  });
+
+  requestAnimationFrame(drawBg);
+}
+drawBg();
+
+// --- DOM Helpers ---
+const $ = sel => document.querySelector(sel);
+const main = $('#main');
+const topbar = $('#topbar');
+const ticker = $('#ticker');
+
+function setPanel(html) {
+  main.innerHTML = html;
+}
+
+function showTopbar() { topbar.classList.remove('hidden'); }
+function hideTopbar() { topbar.classList.add('hidden'); }
+function showTicker(text) {
+  ticker.classList.remove('hidden');
+  $('#ticker-text').textContent = text;
+}
+function hideTicker() { ticker.classList.add('hidden'); }
+
+function updateStats() {
+  $('#money-val').textContent = '$' + G.money;
+  $('#rep-val').textContent = G.reputation;
+  $('#day-label').textContent = `Day ${G.day} / Cycle ${G.cycle}`;
+}
+
+async function transition(text, dur=1200) {
+  Audio.transition();
+  const el = $('#transition');
+  $('#trans-text').textContent = text;
+  el.classList.add('active');
+  await sleep(dur);
+  el.classList.remove('active');
+  await sleep(300);
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// --- Game State ---
+let G = {
+  money: 300,
+  reputation: 50,
+  day: 1,
+  cycle: 1,
+  upgrades: [],
+  // Per-day tracking
+  usedXray: false,
+  usedBlood: false,
+  usedBuffer: false,
+  usedNurse: false,
+  usedLibrary: false,
+  dayResults: [],
+  totalEarnings: 0,
+  patientsCorrect: 0,
+  patientsTotal: 0
+};
+
+function saveGame() {
+  try { localStorage.setItem('clinicalsim', JSON.stringify(G)); } catch(e){}
+}
+function loadGame() {
+  try {
+    const d = localStorage.getItem('clinicalsim');
+    if (d) { G = JSON.parse(d); return true; }
+  } catch(e){}
+  return false;
+}
+function resetGame() {
+  G = { money:300, reputation:50, day:1, cycle:1, upgrades:[], usedXray:false, usedBlood:false, usedBuffer:false, usedNurse:false, usedLibrary:false, dayResults:[], totalEarnings:0, patientsCorrect:0, patientsTotal:0 };
+  localStorage.removeItem('clinicalsim');
+}
+
+// --- Medical Data ---
+const PATIENTS = {
+  day1: [
+    {
+      name: 'Maria Santos', age: 28, sprite: '👩', complexity: 1,
+      complaint: "I've had a runny nose and sore throat for 3 days. No fever, just feeling miserable.",
+      vitals: { hr: 78, bp: '118/76', temp: 98.8, spo2: 99 },
+      symptoms: ['Rhinorrhea', 'Sore throat', 'Mild cough'],
+      labs: 'WBC 7.2, normal differential',
+      xrayClue: 'Clear lung fields, no sinus opacification',
+      correctDx: 'Upper Respiratory Infection (URI)',
+      dxOptions: ['Upper Respiratory Infection (URI)', 'Strep Pharyngitis', 'Allergic Rhinitis', 'Influenza'],
+      correctTx: 'Supportive care: rest, fluids, OTC decongestants & analgesics',
+      txOptions: ['Supportive care: rest, fluids, OTC decongestants & analgesics', 'Amoxicillin 500mg TID x10 days', 'Azithromycin Z-pack', 'Oseltamivir (Tamiflu)'],
+      payment: 150
+    },
+    {
+      name: 'James Wilson', age: 34, sprite: '👨', complexity: 1,
+      complaint: "It hurts when I pee, and I'm going to the bathroom every 30 minutes. Started yesterday.",
+      vitals: { hr: 82, bp: '122/78', temp: 99.2, spo2: 99 },
+      symptoms: ['Dysuria', 'Urinary frequency', 'Suprapubic discomfort'],
+      labs: 'UA: Positive nitrites, positive leukocyte esterase, WBC >10/hpf',
+      xrayClue: 'N/A — urinalysis confirms lower urinary tract infection',
+      correctDx: 'Uncomplicated Urinary Tract Infection',
+      dxOptions: ['Uncomplicated Urinary Tract Infection', 'Sexually Transmitted Infection', 'Kidney Stones (Nephrolithiasis)', 'Prostatitis'],
+      correctTx: 'Trimethoprim-sulfamethoxazole (Bactrim DS) BID x3 days',
+      txOptions: ['Trimethoprim-sulfamethoxazole (Bactrim DS) BID x3 days', 'Ciprofloxacin 500mg BID x7 days', 'Amoxicillin 500mg TID x7 days', 'Phenazopyridine only (no antibiotic)'],
+      payment: 150
+    },
+    {
+      name: 'Sophie Chen', age: 8, sprite: '👧', complexity: 1,
+      complaint: "My throat really hurts and it's hard to swallow. Mom says I had a fever last night.",
+      vitals: { hr: 100, bp: '100/65', temp: 101.4, spo2: 99 },
+      symptoms: ['Sore throat', 'Fever', 'Tonsillar exudates'],
+      labs: 'Rapid strep test: Positive. WBC 13.5 with left shift',
+      xrayClue: 'Neck soft tissue: Enlarged tonsils, no peritonsillar abscess',
+      correctDx: 'Streptococcal Pharyngitis (Strep Throat)',
+      dxOptions: ['Streptococcal Pharyngitis (Strep Throat)', 'Viral Pharyngitis', 'Infectious Mononucleosis', 'Peritonsillar Abscess'],
+      correctTx: 'Amoxicillin 50mg/kg/day divided BID x10 days',
+      txOptions: ['Amoxicillin 50mg/kg/day divided BID x10 days', 'Azithromycin Z-pack x5 days', 'Ibuprofen only, watchful waiting', 'Clindamycin 20mg/kg/day x10 days'],
+      payment: 160
+    },
+    {
+      name: 'Tommy Rodriguez', age: 4, sprite: '👦', complexity: 1,
+      complaint: "He's been tugging at his right ear all day and was up crying all night.",
+      vitals: { hr: 110, bp: '90/60', temp: 101.8, spo2: 99 },
+      symptoms: ['Ear pain (otalgia)', 'Fever', 'Irritability'],
+      labs: 'WBC 14.2. Tympanic membrane: bulging, erythematous, decreased mobility',
+      xrayClue: 'N/A — otoscopic exam is diagnostic',
+      correctDx: 'Acute Otitis Media',
+      dxOptions: ['Acute Otitis Media', 'Otitis Externa (Swimmer\'s Ear)', 'Foreign Body in Ear Canal', 'Temporomandibular Joint Disorder'],
+      correctTx: 'Amoxicillin 90mg/kg/day divided BID x10 days',
+      txOptions: ['Amoxicillin 90mg/kg/day divided BID x10 days', 'Ciprofloxacin ear drops', 'Watchful waiting only (no antibiotics)', 'Augmentin 45mg/kg/day x5 days'],
+      payment: 155
+    },
+    {
+      name: 'Linda Park', age: 42, sprite: '👩‍🦰', complexity: 1,
+      complaint: "My eyes have been red, itchy and watery for a week. Worse in the morning.",
+      vitals: { hr: 72, bp: '120/78', temp: 98.4, spo2: 99 },
+      symptoms: ['Bilateral eye redness', 'Itching', 'Watery discharge'],
+      labs: 'No purulent discharge. Conjunctival injection bilateral, chemosis present',
+      xrayClue: 'N/A — clinical exam is diagnostic for allergic conjunctivitis',
+      correctDx: 'Allergic Conjunctivitis',
+      dxOptions: ['Allergic Conjunctivitis', 'Bacterial Conjunctivitis', 'Viral Conjunctivitis', 'Acute Angle-Closure Glaucoma'],
+      correctTx: 'Topical antihistamine drops (olopatadine) + cool compresses',
+      txOptions: ['Topical antihistamine drops (olopatadine) + cool compresses', 'Topical antibiotics (erythromycin ointment)', 'Oral antibiotics (amoxicillin)', 'Topical corticosteroid drops'],
+      payment: 150
+    },
+    {
+      name: 'David Kim', age: 35, sprite: '🧔', complexity: 1,
+      complaint: "I keep sneezing and my nose is so stuffy. It happens every spring but this year is terrible.",
+      vitals: { hr: 74, bp: '116/74', temp: 98.2, spo2: 99 },
+      symptoms: ['Sneezing', 'Nasal congestion', 'Clear rhinorrhea'],
+      labs: 'Nasal smear: Eosinophils present. IgE mildly elevated',
+      xrayClue: 'Sinus CT: Mild mucosal thickening, no air-fluid levels',
+      correctDx: 'Allergic Rhinitis',
+      dxOptions: ['Allergic Rhinitis', 'Acute Sinusitis', 'Upper Respiratory Infection', 'Vasomotor Rhinitis'],
+      correctTx: 'Intranasal corticosteroid (fluticasone) + oral antihistamine (cetirizine)',
+      txOptions: ['Intranasal corticosteroid (fluticasone) + oral antihistamine (cetirizine)', 'Amoxicillin-clavulanate for 10 days', 'Oral decongestant (pseudoephedrine) only', 'Nasal saline irrigation only'],
+      payment: 150
+    }
+  ],
+  day2: [
+    {
+      name: 'Robert Johnson', age: 62, sprite: '👴', complexity: 2,
+      complaint: "I've had a bad cough with greenish phlegm for 5 days. Getting short of breath climbing stairs.",
+      vitals: { hr: 96, bp: '138/88', temp: 102.1, spo2: 93 },
+      symptoms: ['Productive cough', 'Dyspnea on exertion', 'Fever/chills'],
+      labs: 'WBC 15.8 with left shift. Procalcitonin elevated at 0.8. BMP normal',
+      xrayClue: 'Right lower lobe consolidation with air bronchograms',
+      correctDx: 'Community-Acquired Pneumonia',
+      dxOptions: ['Community-Acquired Pneumonia', 'Acute Bronchitis', 'COPD Exacerbation', 'Pulmonary Embolism'],
+      correctTx: 'Amoxicillin 1g TID + Azithromycin 500mg day1 then 250mg x4 days (outpatient CAP)',
+      txOptions: ['Amoxicillin 1g TID + Azithromycin 500mg day1 then 250mg x4 days (outpatient CAP)', 'Levofloxacin 750mg daily x5 days', 'Amoxicillin alone 500mg TID x10 days', 'Supportive care only, no antibiotics'],
+      payment: 200
+    },
+    {
+      name: 'Patricia Davis', age: 48, sprite: '👩‍🦱', complexity: 2,
+      complaint: "I get this burning feeling in my chest after eating, especially at night. Sometimes food comes back up.",
+      vitals: { hr: 76, bp: '128/82', temp: 98.4, spo2: 99 },
+      symptoms: ['Heartburn (pyrosis)', 'Regurgitation', 'Worse when lying down'],
+      labs: 'CBC normal. H. pylori stool antigen: Negative. Lipase normal',
+      xrayClue: 'Chest X-ray normal. No hiatal hernia on plain film',
+      correctDx: 'Gastroesophageal Reflux Disease (GERD)',
+      dxOptions: ['Gastroesophageal Reflux Disease (GERD)', 'Peptic Ulcer Disease', 'Acute Coronary Syndrome', 'Esophageal Stricture'],
+      correctTx: 'PPI therapy (omeprazole 20mg daily) + lifestyle modifications x8 weeks',
+      txOptions: ['PPI therapy (omeprazole 20mg daily) + lifestyle modifications x8 weeks', 'H2 blocker (famotidine) PRN only', 'Triple therapy for H. pylori eradication', 'Antacids PRN with no follow-up'],
+      payment: 190
+    },
+    {
+      name: 'Marcus Thompson', age: 55, sprite: '🧑‍🦲', complexity: 2,
+      complaint: "My doctor said my blood sugar was high last visit. I've been thirsty a lot and peeing more often.",
+      vitals: { hr: 80, bp: '142/90', temp: 98.6, spo2: 98 },
+      symptoms: ['Polyuria', 'Polydipsia', 'Fatigue'],
+      labs: 'Fasting glucose 186 mg/dL. HbA1c 8.2%. BMP: Cr 1.0. Lipid panel: LDL 145',
+      xrayClue: 'N/A — laboratory values are diagnostic',
+      correctDx: 'Type 2 Diabetes Mellitus',
+      dxOptions: ['Type 2 Diabetes Mellitus', 'Type 1 Diabetes Mellitus', 'Diabetes Insipidus', 'Hyperthyroidism'],
+      correctTx: 'Metformin 500mg BID (titrate up) + lifestyle counseling + ACEI for BP',
+      txOptions: ['Metformin 500mg BID (titrate up) + lifestyle counseling + ACEI for BP', 'Insulin glargine 10 units at bedtime', 'Glipizide 5mg daily as monotherapy', 'Diet and exercise only, recheck in 6 months'],
+      payment: 210
+    },
+    {
+      name: 'Helen White', age: 67, sprite: '👵', complexity: 2,
+      complaint: "My blood pressure has been high every time I check it at the pharmacy. I get headaches sometimes.",
+      vitals: { hr: 84, bp: '162/96', temp: 98.4, spo2: 98 },
+      symptoms: ['Elevated BP (multiple readings)', 'Occasional headaches', 'No chest pain'],
+      labs: 'BMP: K 4.2, Cr 1.1, eGFR 62. UA: No proteinuria. Lipid panel: LDL 138',
+      xrayClue: 'ECG: Normal sinus rhythm, mild LVH by voltage criteria',
+      correctDx: 'Essential Hypertension (Stage 2)',
+      dxOptions: ['Essential Hypertension (Stage 2)', 'White Coat Hypertension', 'Secondary Hypertension (Renal Artery Stenosis)', 'Pheochromocytoma'],
+      correctTx: 'Amlodipine 5mg + Lisinopril 10mg daily, with lifestyle modifications',
+      txOptions: ['Amlodipine 5mg + Lisinopril 10mg daily, with lifestyle modifications', 'Hydrochlorothiazide 25mg daily as monotherapy', 'Lifestyle modifications only, recheck in 3 months', 'Metoprolol 50mg BID as first-line'],
+      payment: 195
+    },
+    {
+      name: 'Carlos Reyes', age: 38, sprite: '🧑', complexity: 2,
+      complaint: "I cut my leg working in the yard 4 days ago. It's getting redder, swollen, and really warm.",
+      vitals: { hr: 88, bp: '126/80', temp: 100.8, spo2: 99 },
+      symptoms: ['Expanding erythema', 'Warmth & swelling', 'Tenderness to palpation'],
+      labs: 'WBC 12.4. Blood cultures pending. Wound culture: pending. CRP elevated at 4.8',
+      xrayClue: 'Soft tissue X-ray: No subcutaneous gas, no foreign body',
+      correctDx: 'Cellulitis',
+      dxOptions: ['Cellulitis', 'Deep Vein Thrombosis', 'Necrotizing Fasciitis', 'Contact Dermatitis'],
+      correctTx: 'Cephalexin 500mg QID x7-10 days + wound care + elevation',
+      txOptions: ['Cephalexin 500mg QID x7-10 days + wound care + elevation', 'Topical mupirocin only', 'IV vancomycin (hospital admission)', 'Clindamycin 300mg TID x5 days'],
+      payment: 200
+    },
+    {
+      name: 'Nancy Clark', age: 44, sprite: '👩‍🦳', complexity: 2,
+      complaint: "I've had this cough for about 2 weeks. It's dry and worse at night. No fever.",
+      vitals: { hr: 76, bp: '118/74', temp: 98.4, spo2: 98 },
+      symptoms: ['Persistent dry cough', 'Worse at night', 'No dyspnea at rest'],
+      labs: 'WBC 8.2, normal differential. CRP 0.4 (normal)',
+      xrayClue: 'Chest X-ray: Clear lung fields bilaterally, no infiltrate',
+      correctDx: 'Acute Bronchitis',
+      dxOptions: ['Acute Bronchitis', 'Community-Acquired Pneumonia', 'Asthma Exacerbation', 'Pertussis'],
+      correctTx: 'Supportive care: honey, dextromethorphan PRN, inhaler if wheezing develops',
+      txOptions: ['Supportive care: honey, dextromethorphan PRN, inhaler if wheezing develops', 'Azithromycin Z-pack x5 days', 'Amoxicillin 500mg TID x10 days', 'Codeine cough suppressant + prednisone burst'],
+      payment: 185
+    }
+  ],
+  day3: [
+    {
+      name: 'Walter Brown', age: 72, sprite: '👴', complexity: 3,
+      complaint: "I can barely breathe. My legs are so swollen I can't get my shoes on. Woke up gasping last night.",
+      vitals: { hr: 108, bp: '98/62', temp: 98.2, spo2: 88 },
+      symptoms: ['Dyspnea at rest', 'Bilateral lower extremity edema', 'Orthopnea / PND'],
+      labs: 'BNP 1840 pg/mL. Cr 1.8 (baseline 1.2). Na 131. Troponin negative',
+      xrayClue: 'CXR: Bilateral pleural effusions, cardiomegaly, cephalization of vessels',
+      correctDx: 'Acute Decompensated Heart Failure (CHF Exacerbation)',
+      dxOptions: ['Acute Decompensated Heart Failure (CHF Exacerbation)', 'COPD Exacerbation', 'Bilateral Pneumonia', 'Nephrotic Syndrome'],
+      correctTx: 'IV furosemide 40mg, supplemental O2, fluid restriction, daily weights, cardiology referral',
+      txOptions: ['IV furosemide 40mg, supplemental O2, fluid restriction, daily weights, cardiology referral', 'Nebulized albuterol + oral prednisone', 'IV normal saline bolus + antibiotics', 'Oral hydrochlorothiazide + home monitoring'],
+      payment: 250
+    },
+    {
+      name: 'Dorothy Mitchell', age: 68, sprite: '👵', complexity: 3,
+      complaint: "My breathing is terrible today. I can't stop coughing up thick yellow stuff. I ran out of my inhalers.",
+      vitals: { hr: 102, bp: '148/88', temp: 100.2, spo2: 87 },
+      symptoms: ['Increased dyspnea', 'Purulent sputum', 'Wheezing'],
+      labs: 'WBC 13.8. ABG: pH 7.32, pCO2 52, pO2 58. CRP 6.2',
+      xrayClue: 'CXR: Hyperinflated lungs, flattened diaphragms, no focal consolidation',
+      correctDx: 'Acute COPD Exacerbation',
+      dxOptions: ['Acute COPD Exacerbation', 'Community-Acquired Pneumonia', 'Acute Asthma Exacerbation', 'Pulmonary Embolism'],
+      correctTx: 'Nebulized bronchodilators + systemic corticosteroids + antibiotics (azithromycin) + O2 titrated to 88-92%',
+      txOptions: ['Nebulized bronchodilators + systemic corticosteroids + antibiotics (azithromycin) + O2 titrated to 88-92%', 'High-flow oxygen at 100% + IV antibiotics', 'Inhaled corticosteroids only + oral antibiotics', 'Oral prednisone taper only, follow-up in 1 week'],
+      payment: 240
+    },
+    {
+      name: 'Frank Lewis', age: 58, sprite: '🧔', complexity: 3,
+      complaint: "My left calf has been aching and swollen for 2 days. I just got back from a 12-hour flight.",
+      vitals: { hr: 92, bp: '134/84', temp: 99.0, spo2: 97 },
+      symptoms: ['Unilateral calf swelling', 'Calf tenderness', 'Recent prolonged immobility'],
+      labs: 'D-dimer: 2.4 μg/mL (elevated). CBC: normal. PT/INR normal. Wells score: 3 (moderate)',
+      xrayClue: 'Compression ultrasound: Non-compressible left popliteal vein — DVT confirmed',
+      correctDx: 'Deep Vein Thrombosis (DVT)',
+      dxOptions: ['Deep Vein Thrombosis (DVT)', 'Cellulitis', 'Ruptured Baker\'s Cyst', 'Muscle Strain (Gastrocnemius Tear)'],
+      correctTx: 'Rivaroxaban 15mg BID x21 days then 20mg daily + hematology follow-up',
+      txOptions: ['Rivaroxaban 15mg BID x21 days then 20mg daily + hematology follow-up', 'Warfarin 5mg daily + bridging with enoxaparin', 'Aspirin 325mg daily + compression stockings', 'Cephalexin 500mg QID + leg elevation'],
+      payment: 235
+    },
+    {
+      name: 'Emily Foster', age: 24, sprite: '👩', complexity: 3,
+      complaint: "I've had this terrible pain around my belly button that moved to my lower right side. I feel nauseous.",
+      vitals: { hr: 104, bp: '118/72', temp: 101.2, spo2: 99 },
+      symptoms: ['RLQ pain (migratory)', 'Nausea/anorexia', 'Rebound tenderness'],
+      labs: 'WBC 16.2 with left shift. CRP 8.4. Lipase normal. β-hCG negative. UA: trace WBC',
+      xrayClue: 'CT abdomen: Dilated appendix (12mm) with periappendiceal fat stranding, no perforation',
+      correctDx: 'Acute Appendicitis',
+      dxOptions: ['Acute Appendicitis', 'Ovarian Cyst Rupture', 'Urinary Tract Infection', 'Mesenteric Lymphadenitis'],
+      correctTx: 'NPO, IV fluids, IV antibiotics, URGENT surgical consultation for appendectomy',
+      txOptions: ['NPO, IV fluids, IV antibiotics, URGENT surgical consultation for appendectomy', 'Oral antibiotics + pain management, outpatient follow-up', 'CT-guided drainage + IV antibiotics', 'Observation x24 hours with serial abdominal exams'],
+      payment: 250
+    },
+    {
+      name: 'Tyler Brooks', age: 19, sprite: '🧑‍🦱', complexity: 3,
+      complaint: "I have the worst headache of my life. Light is killing my eyes and my neck is so stiff.",
+      vitals: { hr: 112, bp: '108/68', temp: 103.4, spo2: 98 },
+      symptoms: ['Severe headache', 'Photophobia', 'Nuchal rigidity'],
+      labs: 'WBC 18.4. CSF: WBC 1200 (neutrophilic), protein 180, glucose 28 (serum 110). Gram stain: GPC in pairs',
+      xrayClue: 'CT head: No mass, no midline shift — safe for LP. LP results above',
+      correctDx: 'Bacterial Meningitis',
+      dxOptions: ['Bacterial Meningitis', 'Viral Meningitis', 'Subarachnoid Hemorrhage', 'Migraine with Aura'],
+      correctTx: 'Empiric IV ceftriaxone + vancomycin + dexamethasone STAT, ICU admission',
+      txOptions: ['Empiric IV ceftriaxone + vancomycin + dexamethasone STAT, ICU admission', 'IV acyclovir + supportive care', 'Triptans + dark room + outpatient follow-up', 'Oral amoxicillin + close outpatient follow-up in 24h'],
+      payment: 250
+    },
+    {
+      name: 'Jessica Nguyen', age: 22, sprite: '👩‍🦰', complexity: 3,
+      complaint: "I feel so sick. I've been throwing up all day, my stomach hurts, and I'm breathing really fast.",
+      vitals: { hr: 118, bp: '102/64', temp: 98.8, spo2: 99 },
+      symptoms: ['Kussmaul respirations', 'Nausea/vomiting', 'Abdominal pain'],
+      labs: 'Glucose 486 mg/dL. pH 7.18. Bicarb 8. Anion gap 28. Ketones: large. K 5.8',
+      xrayClue: 'CXR: Clear. ECG: Peaked T-waves (hyperkalemia)',
+      correctDx: 'Diabetic Ketoacidosis (DKA)',
+      dxOptions: ['Diabetic Ketoacidosis (DKA)', 'Hyperosmolar Hyperglycemic State', 'Acute Pancreatitis', 'Sepsis'],
+      correctTx: 'IV insulin drip + aggressive IV NS + potassium monitoring + ICU admission',
+      txOptions: ['IV insulin drip + aggressive IV NS + potassium monitoring + ICU admission', 'Subcutaneous insulin + oral fluids + observation', 'IV bicarbonate bolus + dextrose drip', 'IV antibiotics + vasopressors + blood cultures'],
+      payment: 250
+    }
+  ]
+};
+
+// --- Upgrades ---
+const UPGRADES = [
+  { id: 'extra_bed', name: 'Extra Bed', icon: '🛏️', cost: 200, desc: '+1 patient capacity per day' },
+  { id: 'xray', name: 'X-Ray Machine', icon: '📡', cost: 300, desc: 'Reveals hidden diagnostic clue for one patient' },
+  { id: 'blood_panel', name: 'Blood Panel Kit', icon: '🩸', cost: 150, desc: 'Shows lab values for one patient per day' },
+  { id: 'time_buffer', name: 'Time Buffer', icon: '⏰', cost: 100, desc: 'Removes time pressure for 1 encounter' },
+  { id: 'nurse', name: 'Nurse Hire', icon: '👩‍⚕️', cost: 250, desc: 'Auto-diagnoses one easy patient per day' },
+  { id: 'waiting_room', name: 'Waiting Room Upgrade', icon: '🪑', cost: 175, desc: '+10% payment from all patients' },
+  { id: 'library', name: 'Medical Library', icon: '📚', cost: 200, desc: 'Eliminates one wrong diagnosis option' }
+];
+
+// --- News Headlines ---
+const NEWS_GOOD = [
+  "LOCAL HERO: Community clinic doctor praised for excellent care!",
+  "CLINIC RISING: Patients report high satisfaction at neighborhood clinic.",
+  "TRUST REBUILT: \"Best doctor we've ever had,\" says community leader.",
+  "HEALTH SPOTLIGHT: Local clinic sets example for community medicine."
+];
+const NEWS_BAD = [
+  "CONCERNS MOUNT: Patients question quality of care at neighborhood clinic.",
+  "CLINIC UNDER FIRE: Multiple misdiagnoses reported in struggling community.",
+  "TRUST ERODING: Residents seek care elsewhere after clinic mishaps.",
+  "REVIEW BOARD: Local health authority investigating complaint reports."
+];
+const NEWS_NEUTRAL = [
+  "COMMUNITY UPDATE: Neighborhood clinic continues serving local residents.",
+  "HEALTH BEAT: Spring allergy season hits the community hard.",
+  "LOCAL NEWS: City council discusses healthcare access improvements.",
+  "COMMUNITY SPOTLIGHT: Volunteers organize health fair next month."
+];
+
+// --- Nurse Dialogue ---
+const NURSE_GOOD = [
+  "Great call, Doctor. That's exactly right.",
+  "Textbook diagnosis. The patient is in good hands.",
+  "I had a feeling you'd get that one. Nice work!",
+  "Another one down. You're really finding your groove."
+];
+const NURSE_BAD = [
+  "Hmm... I'm not sure about that one, Doctor.",
+  "Let's keep an eye on this patient. That might not have been the best call.",
+  "I've seen cases like this before — you might want to reconsider next time.",
+  "Don't beat yourself up. Medicine is hard. Let's learn from this."
+];
+const NURSE_SUMMARY = [
+  "Overall, a solid day at the clinic.",
+  "The community is counting on us. Let's keep pushing.",
+  "Some tough cases today. Get some rest, Doctor.",
+  "Every patient we help makes this neighborhood stronger."
+];
+
+function randomFrom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function shuffle(arr) { const a = [...arr]; for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a; }
+
+// --- Game Flow ---
+async function startGame(continuing=false) {
+  if (!continuing) resetGame();
+  showTopbar();
+  updateStats();
+  await runDay();
+}
+
+async function runDay() {
+  // Reset daily uses
+  G.usedXray = false;
+  G.usedBlood = false;
+  G.usedBuffer = false;
+  G.usedNurse = false;
+  G.usedLibrary = false;
+  G.dayResults = [];
+
+  updateStats();
+
+  // Morning shop
+  bgMode = 'morning';
+  $('#phase-val').textContent = 'Shop';
+  await transition(`☀️ Day ${G.day} — Morning`, 1500);
+  showTicker(getNewsHeadline());
+  await shopPhase();
+
+  // Patient encounters
+  bgMode = 'day';
+  $('#phase-val').textContent = 'Patients';
+  hideTicker();
+  await transition('🏥 Patient Hours', 1200);
+  await encounterPhase();
+
+  // End of day summary
+  bgMode = 'evening';
+  $('#phase-val').textContent = 'Summary';
+  await transition('🌙 End of Day', 1200);
+  await summaryPhase();
+
+  // Advance day
+  if (G.day === 3) {
+    // End of cycle — bill time
+    await billPhase();
+  } else {
+    G.day++;
+    saveGame();
+    await runDay();
+  }
+}
+
+function getNewsHeadline() {
+  if (G.reputation >= 80) return randomFrom(NEWS_GOOD);
+  if (G.reputation <= 20) return randomFrom(NEWS_BAD);
+  return randomFrom(NEWS_NEUTRAL);
+}
+
+// --- Title Screen ---
+function showTitle() {
+  hideTopbar();
+  hideTicker();
+  bgMode = 'title';
+  const hasSave = loadGame();
+  setPanel(`
+    <div class="panel" id="title-screen">
+      <div class="title-logo">🏥 ClinicalSim</div>
+      <div class="title-sub">A Medical Roguelite</div>
+      <div class="title-desc">
+        Rebuild a rundown neighborhood clinic. Diagnose patients with real medical conditions.<br>
+        Make the right calls. Save the community. Don't go bankrupt.
+      </div>
+      <div class="title-buttons">
+        <button class="btn btn-primary" onclick="Audio.click();startGame(false)">🩺 New Game</button>
+        ${hasSave ? `<button class="btn btn-ghost" onclick="Audio.click();startGame(true)">💾 Continue (Day ${G.day}, Cycle ${G.cycle})</button>` : ''}
+      </div>
+    </div>
+  `);
+}
+
+// --- Shop Phase ---
+function shopPhase() {
+  return new Promise(resolve => {
+    Audio.shop();
+    const available = UPGRADES.filter(u => !G.upgrades.includes(u.id));
+    const offered = shuffle(available).slice(0, 3);
+
+    const cardsHtml = offered.map(u => {
+      const owned = G.upgrades.includes(u.id);
+      const canAfford = G.money >= u.cost;
+      let cls = 'shop-card';
+      if (owned) cls += ' owned';
+      else if (!canAfford) cls += ' cant-afford';
+      return `
+        <div class="${cls}" data-id="${u.id}" data-cost="${u.cost}">
+          <div class="card-icon">${u.icon}</div>
+          <div class="card-name">${u.name}</div>
+          <div class="card-desc">${u.desc}</div>
+          <div class="card-price">${owned ? '✅ Owned' : '$' + u.cost}</div>
+        </div>
+      `;
+    }).join('');
+
+    const upgradesOwned = G.upgrades.length > 0
+      ? G.upgrades.map(id => { const u = UPGRADES.find(x=>x.id===id); return u ? u.icon + ' ' + u.name : id; }).join(', ')
+      : 'None yet';
+
+    setPanel(`
+      <div class="panel">
+        <div class="phase-label">Morning — Clinic Shop</div>
+        <h2>🛒 Supply Shop</h2>
+        <p style="text-align:center;font-size:13px;opacity:.6;margin-bottom:4px">Your balance: <strong style="color:var(--gold)">$${G.money}</strong></p>
+        <p style="text-align:center;font-size:12px;opacity:.4;margin-bottom:16px">Owned: ${upgradesOwned}</p>
+        ${available.length === 0 ? '<p style="text-align:center;opacity:.6">All upgrades purchased! 🎉</p>' : `<div class="shop-grid">${cardsHtml}</div>`}
+        <div style="text-align:center;margin-top:16px">
+          <button class="btn btn-primary" id="shop-done">Start Patient Hours →</button>
+        </div>
+      </div>
+    `);
+
+    // Buy handlers
+    document.querySelectorAll('.shop-card:not(.owned):not(.cant-afford)').forEach(card => {
+      card.addEventListener('click', () => {
+        const id = card.dataset.id;
+        const cost = parseInt(card.dataset.cost);
+        if (G.money >= cost && !G.upgrades.includes(id)) {
+          G.money -= cost;
+          G.upgrades.push(id);
+          Audio.coin();
+          updateStats();
+          saveGame();
+          // Re-render shop
+          resolve();
+          shopPhase().then(resolve);
+        }
+      });
+    });
+
+    document.getElementById('shop-done').addEventListener('click', () => {
+      Audio.click();
+      resolve();
+    });
+  });
+}
+
+// --- Encounter Phase ---
+async function encounterPhase() {
+  const dayKey = `day${G.day}`;
+  const pool = PATIENTS[dayKey] || PATIENTS.day1;
+  let baseCount = G.day === 1 ? 3 : G.day === 2 ? 4 : 5;
+  if (G.upgrades.includes('extra_bed')) baseCount++;
+  if (G.reputation >= 80) baseCount++; // bonus patients
+
+  const patients = shuffle(pool).slice(0, Math.min(baseCount, pool.length));
+
+  for (let i = 0; i < patients.length; i++) {
+    const p = patients[i];
+
+    // Nurse auto-diagnose for easy patients
+    if (G.upgrades.includes('nurse') && !G.usedNurse && p.complexity === 1) {
+      G.usedNurse = true;
+      const payment = calcPayment(p.payment, true, true);
+      G.money += payment;
+      G.reputation = Math.min(100, G.reputation + 5);
+      G.patientsCorrect++;
+      G.patientsTotal++;
+      G.dayResults.push({
+        name: p.name, dx: p.correctDx, tx: p.correctTx,
+        dxCorrect: true, txCorrect: true, payment, nurse: true
+      });
+      updateStats();
+      saveGame();
+      // Show brief auto-resolve
+      await showNurseAutoResolve(p, payment);
+      continue;
+    }
+
+    await runEncounter(p, i+1, patients.length);
+  }
+}
+
+function calcPayment(base, dxCorrect, txCorrect) {
+  let amount;
+  if (dxCorrect && txCorrect) amount = base;
+  else if (dxCorrect) amount = Math.round(base * 0.5);
+  else amount = 25;
+
+  // Waiting room bonus
+  if (G.upgrades.includes('waiting_room')) amount = Math.round(amount * 1.1);
+
+  // Reputation multiplier
+  amount = Math.round(amount * (G.reputation / 100));
+
+  return Math.max(amount, 10);
+}
+
+async function showNurseAutoResolve(p, payment) {
+  return new Promise(resolve => {
+    setPanel(`
+      <div class="panel">
+        <div class="phase-label">Nurse Auto-Diagnosis</div>
+        <h2>👩‍⚕️ Nurse Handled It</h2>
+        <div class="nurse-msg">
+          <div class="nurse-avatar">👩‍⚕️</div>
+          <div class="nurse-text">"I took care of ${p.name} — classic ${p.correctDx}. Prescribed ${p.correctTx.split(',')[0]}. Easy one!"</div>
+        </div>
+        <div style="text-align:center;margin:16px 0">
+          <span style="font-size:24px;color:var(--green);font-weight:700">+$${payment}</span>
+        </div>
+        <div style="text-align:center">
+          <button class="btn btn-primary" id="nurse-ok">Continue →</button>
+        </div>
+      </div>
+    `);
+    Audio.success();
+    document.getElementById('nurse-ok').addEventListener('click', () => { Audio.click(); resolve(); });
+  });
+}
+
+function runEncounter(patient, num, total) {
+  return new Promise(resolve => {
+    let phase = 'review'; // review -> diagnosis -> treatment -> result
+    let dxChoice = null, txChoice = null;
+    let dxCorrect = false, txCorrect = false;
+    let timerInterval = null;
+    let timeLeft = 45; // seconds
+    const hasBuffer = G.upgrades.includes('time_buffer') && !G.usedBuffer;
+    if (hasBuffer) timeLeft = 999; // effectively no limit
+
+    // Prepare eliminated option for library
+    let eliminatedDx = null;
+    const canUseLibrary = G.upgrades.includes('library') && !G.usedLibrary;
+
+    function renderReview() {
+      const showLabs = G.upgrades.includes('blood_panel') && !G.usedBlood;
+      const showXray = G.upgrades.includes('xray') && !G.usedXray;
+
+      const vitalsHtml = [
+        { label: 'HR', val: patient.vitals.hr + ' bpm', abnormal: patient.vitals.hr > 100 || patient.vitals.hr < 60 },
+        { label: 'BP', val: patient.vitals.bp + ' mmHg', abnormal: parseInt(patient.vitals.bp) > 140 || parseInt(patient.vitals.bp) < 90 },
+        { label: 'Temp', val: patient.vitals.temp + '°F', abnormal: patient.vitals.temp > 100.4 },
+        { label: 'SpO2', val: patient.vitals.spo2 + '%', abnormal: patient.vitals.spo2 < 95 }
+      ].map(v => `
+        <div class="vital-item">
+          <span class="vital-label">${v.label}:</span>
+          <span class="vital-val ${v.abnormal ? 'abnormal' : ''}">${v.val}</span>
+        </div>
+      `).join('');
+
+      let extrasHtml = '';
+      if (showLabs) {
+        extrasHtml += `<button class="use-item-btn" id="use-blood">🩸 Use Blood Panel Kit</button> `;
+      }
+      if (showXray) {
+        extrasHtml += `<button class="use-item-btn" id="use-xray">📡 Use X-Ray Machine</button> `;
+      }
+
+      setPanel(`
+        <div class="panel">
+          <div class="panel-scroll">
+            <div class="phase-label">Patient ${num}/${total} — Review</div>
+            <h2>${patient.sprite} ${patient.name}, ${patient.age}yo</h2>
+            <div class="complaint-bubble">"${patient.complaint}"</div>
+            <h3>Vitals</h3>
+            <div class="vitals">${vitalsHtml}</div>
+            <h3>Key Findings</h3>
+            <div class="symptoms">
+              ${patient.symptoms.map(s => `<span class="symptom-tag">${s}</span>`).join('')}
+            </div>
+            <div id="extras-area">
+              ${extrasHtml ? `<div style="margin:12px 0;display:flex;gap:8px;flex-wrap:wrap">${extrasHtml}</div>` : ''}
+              <div id="lab-display"></div>
+              <div id="xray-display"></div>
+            </div>
+            <div style="text-align:center;margin-top:16px">
+              <button class="btn btn-primary" id="begin-dx">Make Diagnosis →</button>
+            </div>
+          </div>
+        </div>
+      `);
+
+      if (document.getElementById('use-blood')) {
+        document.getElementById('use-blood').addEventListener('click', () => {
+          G.usedBlood = true;
+          Audio.click();
+          document.getElementById('lab-display').innerHTML = `
+            <div class="lab-panel"><h4>🩸 Lab Results</h4>${patient.labs}</div>
+          `;
+          document.getElementById('use-blood').disabled = true;
+          document.getElementById('use-blood').textContent = '🩸 Used';
+        });
+      }
+      if (document.getElementById('use-xray')) {
+        document.getElementById('use-xray').addEventListener('click', () => {
+          G.usedXray = true;
+          Audio.click();
+          document.getElementById('xray-display').innerHTML = `
+            <div class="diag-clue"><h4>📡 Imaging / Diagnostic Clue</h4>${patient.xrayClue}</div>
+          `;
+          document.getElementById('use-xray').disabled = true;
+          document.getElementById('use-xray').textContent = '📡 Used';
+        });
+      }
+
+      document.getElementById('begin-dx').addEventListener('click', () => {
+        Audio.click();
+        if (hasBuffer && !G.usedBuffer) G.usedBuffer = true;
+        phase = 'diagnosis';
+        renderDiagnosis();
+      });
+    }
+
+    function renderDiagnosis() {
+      let dxOpts = shuffle(patient.dxOptions);
+
+      // Library: eliminate one wrong option
+      let libraryBtn = '';
+      if (canUseLibrary && !eliminatedDx) {
+        libraryBtn = `<button class="use-item-btn" id="use-library">📚 Use Medical Library (eliminate 1 wrong option)</button>`;
+      }
+
+      const optsHtml = dxOpts.map((opt, i) => {
+        const elim = eliminatedDx === opt;
+        return `<button class="option-btn ${elim ? 'eliminated' : ''}" data-idx="${i}" data-val="${encodeURIComponent(opt)}" ${elim ? 'disabled' : ''}>${opt}</button>`;
+      }).join('');
+
+      setPanel(`
+        <div class="panel" style="position:relative">
+          <div class="panel-scroll">
+            <div class="phase-label">Patient ${num}/${total} — Diagnosis</div>
+            <h2>🔍 What's Your Diagnosis?</h2>
+            <p style="font-size:13px;opacity:.5;margin-bottom:4px">${patient.sprite} ${patient.name}: "${patient.complaint.slice(0, 60)}..."</p>
+            ${!hasBuffer || G.usedBuffer ? '' : ''}
+            <div style="margin:8px 0">${libraryBtn}</div>
+            <div class="option-grid" id="dx-options">${optsHtml}</div>
+          </div>
+        </div>
+      `);
+
+      if (document.getElementById('use-library')) {
+        document.getElementById('use-library').addEventListener('click', () => {
+          G.usedLibrary = true;
+          Audio.click();
+          // Find a wrong option to eliminate
+          const wrongOpts = patient.dxOptions.filter(o => o !== patient.correctDx);
+          eliminatedDx = randomFrom(wrongOpts);
+          renderDiagnosis(); // re-render
+        });
+      }
+
+      document.querySelectorAll('#dx-options .option-btn:not(.eliminated)').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const val = decodeURIComponent(btn.dataset.val);
+          dxChoice = val;
+          dxCorrect = (val === patient.correctDx);
+
+          // Show correct/wrong
+          document.querySelectorAll('#dx-options .option-btn').forEach(b => {
+            const bVal = decodeURIComponent(b.dataset.val);
+            b.style.pointerEvents = 'none';
+            if (bVal === patient.correctDx) b.classList.add('correct');
+            if (bVal === val && !dxCorrect) b.classList.add('wrong');
+          });
+
+          if (dxCorrect) Audio.success(); else Audio.fail();
+
+          setTimeout(() => {
+            phase = 'treatment';
+            renderTreatment();
+          }, 1200);
+        });
+      });
+    }
+
+    function renderTreatment() {
+      const txOpts = shuffle(patient.txOptions);
+      const optsHtml = txOpts.map((opt, i) =>
+        `<button class="option-btn" data-idx="${i}" data-val="${encodeURIComponent(opt)}">${opt}</button>`
+      ).join('');
+
+      const dxResult = dxCorrect
+        ? `<span style="color:var(--green)">✅ Correct: ${patient.correctDx}</span>`
+        : `<span style="color:var(--red)">❌ Incorrect (was: ${patient.correctDx})</span>`;
+
+      setPanel(`
+        <div class="panel" style="position:relative">
+          <div class="panel-scroll">
+            <div class="phase-label">Patient ${num}/${total} — Treatment</div>
+            <h2>💊 Choose Treatment</h2>
+            <p style="font-size:13px;margin-bottom:12px">Your diagnosis: ${dxResult}</p>
+            <div class="option-grid" id="tx-options">${optsHtml}</div>
+          </div>
+        </div>
+      `);
+
+      document.querySelectorAll('#tx-options .option-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const val = decodeURIComponent(btn.dataset.val);
+          txChoice = val;
+          txCorrect = (val === patient.correctTx);
+
+          document.querySelectorAll('#tx-options .option-btn').forEach(b => {
+            const bVal = decodeURIComponent(b.dataset.val);
+            b.style.pointerEvents = 'none';
+            if (bVal === patient.correctTx) b.classList.add('correct');
+            if (bVal === val && !txCorrect) b.classList.add('wrong');
+          });
+
+          if (txCorrect) Audio.success(); else Audio.fail();
+
+          setTimeout(() => {
+            phase = 'result';
+            showResult();
+          }, 1200);
+        });
+      });
+    }
+
+    function showResult() {
+      const payment = calcPayment(patient.payment, dxCorrect, txCorrect);
+      G.money += payment;
+      G.patientsTotal++;
+
+      // Reputation
+      if (dxCorrect) {
+        G.reputation = Math.min(100, G.reputation + 5);
+        G.patientsCorrect++;
+      } else {
+        G.reputation = Math.max(0, G.reputation - 10);
+      }
+
+      G.dayResults.push({
+        name: patient.name, dx: dxChoice, correctDx: patient.correctDx,
+        tx: txChoice, correctTx: patient.correctTx,
+        dxCorrect, txCorrect, payment
+      });
+
+      updateStats();
+      saveGame();
+
+      const resultClass = dxCorrect && txCorrect ? 'good' : dxCorrect ? 'partial' : 'bad';
+      const resultLabel = dxCorrect && txCorrect ? 'Perfect Diagnosis & Treatment!'
+        : dxCorrect ? 'Correct Diagnosis, Wrong Treatment'
+        : 'Incorrect Diagnosis';
+      const resultIcon = dxCorrect && txCorrect ? '🌟' : dxCorrect ? '⚠️' : '❌';
+
+      const nurseMsg = dxCorrect ? randomFrom(NURSE_GOOD) : randomFrom(NURSE_BAD);
+
+      Audio.coin();
+
+      setPanel(`
+        <div class="panel">
+          <div class="panel-scroll">
+            <div class="phase-label">Patient ${num}/${total} — Result</div>
+            <h2>${resultIcon} ${resultLabel}</h2>
+            <div style="text-align:center;margin:16px 0">
+              <span style="font-size:32px;font-weight:700;color:var(--${resultClass === 'good' ? 'green' : resultClass === 'partial' ? 'gold' : 'red'})">+$${payment}</span>
+            </div>
+            <div style="font-size:13px;opacity:.7;margin-bottom:12px">
+              <p><strong>Diagnosis:</strong> ${dxCorrect ? '✅' : '❌'} ${dxChoice} ${!dxCorrect ? `(Correct: ${patient.correctDx})` : ''}</p>
+              <p><strong>Treatment:</strong> ${txCorrect ? '✅' : '❌'} ${txChoice} ${!txCorrect ? `(Correct: ${patient.correctTx})` : ''}</p>
+            </div>
+            <div class="nurse-msg">
+              <div class="nurse-avatar">👩‍⚕️</div>
+              <div class="nurse-text">${nurseMsg}</div>
+            </div>
+            <div style="text-align:center;margin-top:16px">
+              <button class="btn btn-primary" id="next-patient">${num < total ? 'Next Patient →' : 'End of Day →'}</button>
+            </div>
+          </div>
+        </div>
+      `);
+
+      document.getElementById('next-patient').addEventListener('click', () => {
+        Audio.click();
+        resolve();
+      });
+    }
+
+    // Start with review
+    renderReview();
+  });
+}
+
+// --- Summary Phase ---
+function summaryPhase() {
+  return new Promise(resolve => {
+    const results = G.dayResults;
+    const totalEarned = results.reduce((s, r) => s + r.payment, 0);
+    const perfect = results.filter(r => r.dxCorrect && r.txCorrect).length;
+    const correct = results.filter(r => r.dxCorrect).length;
+
+    const rowsHtml = results.map(r => {
+      const cls = r.dxCorrect && r.txCorrect ? 'good' : r.dxCorrect ? 'partial' : 'bad';
+      const icon = r.nurse ? '👩‍⚕️' : r.dxCorrect && r.txCorrect ? '🌟' : r.dxCorrect ? '⚠️' : '❌';
+      return `
+        <div class="summary-row">
+          <div>
+            <div style="font-weight:600;color:var(--white)">${icon} ${r.name}</div>
+            <div style="font-size:12px;opacity:.5">${r.nurse ? 'Nurse handled' : (r.dxCorrect ? r.dx || r.correctDx : 'Misdiagnosed')}</div>
+          </div>
+          <div class="summary-result ${cls}">+$${r.payment}</div>
+        </div>
+      `;
+    }).join('');
+
+    const nurseMsg = randomFrom(NURSE_SUMMARY);
+
+    setPanel(`
+      <div class="panel">
+        <div class="panel-scroll">
+          <div class="phase-label">End of Day ${G.day}</div>
+          <h2>📋 Daily Summary</h2>
+          <div style="display:flex;justify-content:center;gap:24px;margin:16px 0;font-size:14px">
+            <div style="text-align:center">
+              <div style="font-size:24px;font-weight:700;color:var(--green)">$${totalEarned}</div>
+              <div style="opacity:.5;font-size:12px">Earned Today</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:24px;font-weight:700;color:var(--blue)">${correct}/${results.length}</div>
+              <div style="opacity:.5;font-size:12px">Correct Dx</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:24px;font-weight:700;color:var(--gold)">${perfect}</div>
+              <div style="opacity:.5;font-size:12px">Perfect</div>
+            </div>
+          </div>
+          <div style="margin:16px 0">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+              <span>Reputation</span>
+              <span style="font-weight:700;color:${G.reputation >= 50 ? 'var(--green)' : 'var(--red)'}">${G.reputation}/100</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width:${G.reputation}%;background:${G.reputation >= 80 ? 'var(--green)' : G.reputation >= 40 ? 'var(--blue)' : 'var(--red)'}"></div>
+            </div>
+          </div>
+          ${rowsHtml}
+          <div class="nurse-msg">
+            <div class="nurse-avatar">👩‍⚕️</div>
+            <div class="nurse-text">${nurseMsg}${G.day === 3 ? ' Tomorrow the clinic bills are due — $500.' : ''}</div>
+          </div>
+          <div style="text-align:center;margin-top:16px">
+            <button class="btn btn-primary" id="summary-done">${G.day === 3 ? 'Face the Bills →' : 'Next Day →'}</button>
+          </div>
+        </div>
+      </div>
+    `);
+
+    document.getElementById('summary-done').addEventListener('click', () => {
+      Audio.click();
+      resolve();
+    });
+  });
+}
+
+// --- Bill Phase (End of Cycle) ---
+async function billPhase() {
+  const billAmount = 500;
+  bgMode = 'night';
+
+  if (G.money >= billAmount) {
+    // Success!
+    G.money -= billAmount;
+    G.cycle++;
+    G.day = 1;
+    G.totalEarnings += billAmount;
+    saveGame();
+
+    Audio.success();
+    await new Promise(resolve => {
+      showTicker(G.reputation >= 80 ? randomFrom(NEWS_GOOD) : "The clinic stays open for another cycle. The community breathes easier.");
+
+      setPanel(`
+        <div class="panel">
+          <div class="phase-label">End of Cycle ${G.cycle - 1}</div>
+          <h2>🎉 Bills Paid!</h2>
+          <div style="text-align:center;margin:20px 0">
+            <div style="font-size:48px;margin-bottom:12px">🏥</div>
+            <p style="font-size:16px;color:var(--green);font-weight:700">The clinic survives another cycle!</p>
+            <p style="font-size:14px;opacity:.6;margin-top:8px">Paid $${billAmount} in bills. Remaining balance: $${G.money}</p>
+            <p style="font-size:14px;opacity:.6;margin-top:4px">Reputation: ${G.reputation}/100 | Cycle ${G.cycle} begins</p>
+          </div>
+          <div class="nurse-msg">
+            <div class="nurse-avatar">👩‍⚕️</div>
+            <div class="nurse-text">"Great work, Doctor. The community needs us. Let's keep going — the next three days won't be easy either."</div>
+          </div>
+          <div style="text-align:center;margin-top:20px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+            <button class="btn btn-green" id="continue-btn">Continue to Cycle ${G.cycle} →</button>
+            <button class="btn btn-ghost" id="quit-btn">Quit While Ahead</button>
+          </div>
+        </div>
+      `);
+
+      document.getElementById('continue-btn').addEventListener('click', () => {
+        Audio.click();
+        resolve('continue');
+      });
+      document.getElementById('quit-btn').addEventListener('click', () => {
+        Audio.click();
+        resolve('quit');
+      });
+    }).then(choice => {
+      if (choice === 'continue') {
+        return runDay();
+      } else {
+        showVictoryScreen();
+      }
+    });
+  } else {
+    // Bankruptcy
+    Audio.fail();
+    showGameOver();
+  }
+}
+
+function showGameOver() {
+  hideTicker();
+  setPanel(`
+    <div class="panel">
+      <div class="phase-label">Game Over</div>
+      <h2 style="color:var(--red)">💔 Bankruptcy</h2>
+      <div style="text-align:center;margin:20px 0">
+        <div style="font-size:48px;margin-bottom:12px">🏚️</div>
+        <p style="font-size:16px;color:var(--red);font-weight:700">You couldn't pay the $500 clinic bills.</p>
+        <p style="font-size:14px;opacity:.6;margin-top:8px">Balance: $${G.money} | Needed: $500</p>
+        <p style="font-size:14px;opacity:.6;margin-top:4px">Final reputation: ${G.reputation}/100</p>
+        <p style="font-size:14px;opacity:.5;margin-top:12px">Patients treated: ${G.patientsTotal} | Correct diagnoses: ${G.patientsCorrect}</p>
+      </div>
+      <div class="nurse-msg">
+        <div class="nurse-avatar">👩‍⚕️</div>
+        <div class="nurse-text">"We gave it our best shot, Doctor. The community deserved better... but maybe next time."</div>
+      </div>
+      <div style="text-align:center;margin-top:20px">
+        <button class="btn btn-primary" onclick="Audio.click();resetGame();showTitle()">Try Again</button>
+      </div>
+    </div>
+  `);
+}
+
+function showVictoryScreen() {
+  hideTicker();
+  setPanel(`
+    <div class="panel">
+      <div class="phase-label">Victory</div>
+      <h2 style="color:var(--green)">🏆 You Did It!</h2>
+      <div style="text-align:center;margin:20px 0">
+        <div style="font-size:48px;margin-bottom:12px">🌟</div>
+        <p style="font-size:16px;color:var(--green);font-weight:700">The clinic is thriving!</p>
+        <p style="font-size:14px;opacity:.6;margin-top:8px">Cycles completed: ${G.cycle - 1} | Final balance: $${G.money}</p>
+        <p style="font-size:14px;opacity:.6;margin-top:4px">Final reputation: ${G.reputation}/100</p>
+        <p style="font-size:14px;opacity:.5;margin-top:12px">Patients treated: ${G.patientsTotal} | Correct diagnoses: ${G.patientsCorrect}</p>
+        <p style="font-size:14px;opacity:.5">Accuracy: ${G.patientsTotal > 0 ? Math.round(G.patientsCorrect/G.patientsTotal*100) : 0}%</p>
+      </div>
+      <div class="nurse-msg">
+        <div class="nurse-avatar">👩‍⚕️</div>
+        <div class="nurse-text">"You've done something incredible here, Doctor. This community will remember what you built. Thank you."</div>
+      </div>
+      <div style="text-align:center;margin-top:20px">
+        <button class="btn btn-primary" onclick="Audio.click();resetGame();showTitle()">New Game</button>
+      </div>
+    </div>
+  `);
+}
+
+// --- Init ---
+showTitle();
+</script>
+</body>
+</html>
